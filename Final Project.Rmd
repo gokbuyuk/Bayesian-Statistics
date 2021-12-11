@@ -1,0 +1,113 @@
+---
+title: "S626 - Final Project"
+author: "Gokcen Buyukbas, Xiao Liu, Luke Williams"
+date: "12/11/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE, message=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache=TRUE, autodep=TRUE, cache.comments=FALSE, message=FALSE, warning=FALSE)
+
+rm(list=ls())
+```
+```{r, echo=FALSE, include=FALSE}
+library(knitr)
+library(ggplot2)
+library(cowplot)
+library(reshape)
+library(matlib)
+library(dplyr)
+library(Hmisc)
+library(pastecs)
+```
+
+## IQ scores by gender
+
+```{r}
+set.seed(12223)
+female_IQ = rnorm(20, mean = 111.9, sd = 23.7)
+male_IQ = rnorm(20, mean = 115, sd = 25)
+df = data.frame(female = female_IQ, male=male_IQ)
+summary(df)
+sd(df$female)
+sd(df$male)
+```
+```{r}
+ggplot(df) + geom_density(aes(x = female), color='red')+ geom_density(aes(x = male), color="blue") # add legend
+```
+
+```{r}
+SSF <- sum((df$female-mean(df$female))^2)
+SSM <- sum((df$male-mean(df$male))^2)
+mean_f <- mean(df$female)
+mean_m <- mean(df$male)
+n = length(df$female)
+```
+
+
+```{r}
+#Posteriors with informative priors
+muF_0 <- muM_0 <- mean(mean_f, mean_m)
+SS0_F <- SS0_M <- mean(SSF,SSM)
+k0_F <- k0_M <- 1
+v0_F <- v0_M <- 1
+muF_n <-muF_0*k0_F/(k0_F + n) + mean_f*n/(k0_F + n)
+muM_n <- muM_0*k0_M/(k0_M + n) + mean_m*n/(k0_M + n)
+SSF_n <- SSF + SS0_F + (muF_n - mean_f)^2 * k0_F * n / (k0_F + n)
+SSM_n <- SSM + SS0_M + (muM_n - mean_m)^2 * k0_M * n / (k0_M + n)
+
+```
+
+```{r}
+#contour plots
+dgamma_normal <- function(m.p, g, mu, kappa, shape, rate){
+  res <- dnorm(m.p, mean = mu, sd = sqrt(1/g/kappa)) * dgamma(g, shape = shape, rate = rate)
+  return(res)
+}
+
+x <- seq(90, 130,length = 50)
+y <- seq(0, 0.005, length = 50)
+
+contour(x=x, y = y, 
+        z = outer(x,y,FUN=dgamma_normal, mu=muF_n, kappa=k0_F + n, shape = (v0_F+n)/2, rate = SSF_n/2),
+        col = 'red',
+        xlab = expression(mu), ylab = expression(phi)
+)
+contour(x=x, y = y, 
+        z = outer(x,y,FUN=dgamma_normal, mu=muM_n, kappa=k0_M + n, shape = (v0_M+n)/2, rate = SSM_n/2), add = T, col = 'blue'
+)
+legend('topleft', col = c('blue', 'red'), legend=c('Male', 'Female'), lty = c(1,1))
+
+#samples from posterior distribution
+repl <- 1000
+phi_F <- rgamma(n=repl, shape = (v0_F+n)/2, rate=SSF_n/2)
+mu_F <- rnorm(n=repl, mean = muF_n, sd=sqrt(1/phi_F/(k0_F + n)))
+points(mu_F, phi_F, col='red')
+
+phi_M <- rgamma(n=repl, shape = (v0_M+n)/2, rate=SSM_n/2)
+mu_M <- rnorm(n=repl, mean = muM_n, sd=sqrt(1/phi_M/(k0_M + n)))
+points(mu_M, phi_M, col='blue')
+
+```
+
+```{r}
+hist(phi_F, xlab = expression(phi[Female])); hist(mu_F, xlab=expression(mu[Female]))
+hist(phi_M, xlab = expression(phi[Male])); hist(mu_M, xlab=expression(mu[Male]))
+
+plot(c(0, 0.002), c(0,2500), type='n',  xlab = expression(phi), ylab = 'Density')
+lines(density(phi_M), col='blue')
+lines(density(phi_F), col= 'red')
+legend('topright', col = c('red','blue'), lty = c(1,1), legend = c('Female', 'Male'))
+
+plot(c(100, 140), c(0,0.10), type='n',  xlab = expression(mu), ylab = 'Density')
+lines(density(mu_M), col='blue')
+lines(density(mu_F), col= 'red')
+legend('topleft', col = c('red','blue'), lty = c(1,1), legend = c('Female', 'Male'))
+
+```
+```{r}
+hist(mu_M - mu_F, xlab = expression(theta))
+
+mean(mu_M > mu_F)
+```
+
